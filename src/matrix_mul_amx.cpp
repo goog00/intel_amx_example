@@ -31,6 +31,18 @@ public:
       data[i] = value;
     }
   }
+
+  // 打印矩阵
+  void print() const {
+    for (int i = 0; i < rows; ++i) {
+      for (int j = 0; j < cols; ++j) {
+        std::cout << static_cast<int>(data[i * cols + j]) << " ";
+      }
+      std::cout << "\n";
+    }
+
+    std::cout << "\n";
+  }
 };
 
 struct __tile_config {
@@ -104,9 +116,12 @@ int main() {
   Matrix<int32_t> C(16, 16);
 
   // 初始化矩阵
-  A.Fill(1);
-  B.Fill(1);
+  A.Fill(2);
+  A.print();
+  B.Fill(2);
+  B.print();
   C.Fill(0);
+  C.print();
 
   // 执行乘法
   MatrixMultiply<int8_t, int32_t> multiply;
