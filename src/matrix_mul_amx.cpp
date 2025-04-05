@@ -33,7 +33,7 @@ public:
   }
 
   // 打印矩阵
-  void print() const {
+  void Print() const {
     for (int i = 0; i < rows; ++i) {
       for (int j = 0; j < cols; ++j) {
         std::cout << static_cast<int>(data[i * cols + j]) << " ";
@@ -54,49 +54,35 @@ struct __tile_config {
 };
 
 template <typename InputType, typename OutputType> 
-class MatrixMultiply {
+class IntelAmxMatrixMultiply {
 private:
   int ARCH_REQ_XCOMP_PERM = 0x1023;
   int XFEATURE_XTILEDATA = 18;
-  int rows = 16;
-  int colsb = 64;
+  int ROWS = 16;
+  int COLSB = 64;
 
-  void init_tile_config(__tile_config *tileinfo) {
+  void InitTileConfig(__tile_config *tileinfo) {
 
     int i;
     tileinfo->palette_id = 1;
     tileinfo->start_row = 0;
-
-    // 疑问：这里是否应该是用多少申请多少？
-    for (i = 1; i < 4; ++i) {
-      tileinfo->colsb[i] = colsb;
-      tileinfo->rows[i] = rows;
+    for (i = 0; i < 8; ++i) {
+      tileinfo->colsb[i] = COLSB;
+      tileinfo->rows[i] = ROWS;
     }
 
     _tile_loadconfig(tileinfo);
   }
 
-  bool set_tiledata_use() {
-    if (syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA)) {
-      std::cerr << "Failed to enable AMX tile data\n";
-      return false;
-    } else {
-      printf("\n TILE DATA USE SET - OK \n\n");
-      return true;
-    }
-    return true;
-  }
-
 public:
-  void matrix_multiply_amx(Matrix<InputType> &A, Matrix<InputType> &B,
+
+  void MatrixMultiply(Matrix<InputType> &A, Matrix<InputType> &B,
                            Matrix<OutputType> &C) {
 
     __tile_config tile_data = {0};
-    if (!set_tiledata_use()) {
-      exit(-1);
-    }
 
-    init_tile_config(&tile_data);
+    InitTileConfig(&tile_data);
+
     _tile_loadd(2, A.Data(), A.Stride());
     _tile_loadd(3, B.Data(), B.Stride());
     _tile_loadd(1, C.Data(), C.Stride());
@@ -104,8 +90,19 @@ public:
     _tile_dpbssd(1, 2, 3);
     _tile_stored(1, C.Data(), C.Stride());
 
+  }
+
+  bool SetTileDataUse() {
+    if (syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA)) {
+      return false;
+    } 
+    return true;
+  }
+
+  void TileRelease() {
     _tile_release();
   }
+
 };
 
 // 测试代码
@@ -117,16 +114,19 @@ int main() {
 
   // 初始化矩阵
   A.Fill(2);
-  A.print();
+  A.Print();
   B.Fill(2);
-  B.print();
+  B.Print();
   C.Fill(0);
-  C.print();
+  C.Print();
 
   // 执行乘法
-  MatrixMultiply<int8_t, int32_t> multiply;
-  multiply.matrix_multiply_amx(A, B, C);
-
+  IntelAmxMatrixMultiply<int8_t, int32_t> multiply;
+  if (!multiply.SetTileDataUse()) {
+    exit(-1);
+  }
+  multiply.MatrixMultiply(A, B, C);
+  multiply.TileRelease();
   // 打印结果（简单验证）
   for (int i = 0; i < C.Rows(); ++i) {
     for (int j = 0; j < C.Cols(); ++j) {
