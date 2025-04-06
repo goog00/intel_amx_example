@@ -96,39 +96,37 @@ public:
     return self;
   }
 
+
+  void MatrixMultiply(std::vector<Matrix<InputType>> &VA0, std::vector<Matrix<InputType>> &VA1, std::vector<Matrix<InputType>> &VB0, std::vector<Matrix<InputType>> &VB1, 
+                      Matrix<OutputType> &C00, Matrix<OutputType> &C01, Matrix<OutputType> &C10, Matrix<OutputType> &C11) {
+
+                _tile_loadd(4, C00.Data(), C00.Stride());
+                _tile_loadd(5, C01.Data(), C01.Stride());
+                _tile_loadd(6, C10.Data(), C10.Stride());
+                _tile_loadd(7, C11.Data(), C11.Stride());
+                        
+                for (size_t k = 0; k < VA0.size(); ++k) {
+                  _tile_loadd(0, VA0[k].Data(), VA0[k].Stride()); // A00(:,k)
+                  _tile_loadd(1, VB0[k].Data(), VB0[k].Stride()); // B00(k,:)
+
+                  _tile_loadd(2, VA1[k].Data(), VA1[k].Stride()); // A10(:,k)
+                  _tile_loadd(3, VB1[k].Data(), VB1[k].Stride()); // B01(k,:)
+
+                  // 外积方式进行 accumulate
+                  _tile_dpbssd(4, 0, 1); // C00 += A00(:,k) * B00(k,:)
+                  _tile_dpbssd(5, 0, 3); // C01 += A00(:,k) * B01(k,:)
+                  _tile_dpbssd(6, 2, 1); // C10 += A10(:,k) * B00(k,:)
+                  _tile_dpbssd(7, 2, 3); // C11 += A10(:,k) * B01(k,:)
+                }
+
+                // 最后一次性存回
+                _tile_stored(4, C00.Data(), C00.Stride());
+                _tile_stored(5, C01.Data(), C01.Stride());
+                _tile_stored(6, C10.Data(), C10.Stride());
+                _tile_stored(7, C11.Data(), C11.Stride());
   
-
-  void MatrixMultiply(std::vector<Matrix<InputType>> &VA, std::vector<Matrix<InputType>> &VB, Matrix<OutputType> &C) {
-      // todo check VA VB size
-     _tile_loadd(0, C.Data(), C.Stride());
-
-    for (size_t i = 0; i < VA.size(); i+=4) {
-
-        _tile_loadd(1, VA[i].Data(), VA[i].Stride());
-        _tile_loadd(2, VB[i].Data(), VB[i].Stride());
-        _tile_dpbssd(0, 1, 2);
-
-        _tile_loadd(3, VA[i+1].Data(), VA[i+1].Stride());
-        _tile_loadd(4, VB[i+1].Data(), VB[i+1].Stride());
-        _tile_dpbssd(0, 3, 4);
-
-        _tile_loadd(5, VA[i+2].Data(), VA[i+2].Stride());
-        _tile_loadd(6, VB[i+2].Data(), VB[i+2].Stride());
-        _tile_dpbssd(0, 5, 6);
-
-        _tile_loadd(7, VA[i+3].Data(), VA[i+3].Stride());
-        _tile_loadd(1, VB[i+3].Data(), VB[i+3].Stride());
-        _tile_dpbssd(0, 7, 1);
-      
-    }
-
-    // todo 尾部处理
-
-
-    _tile_stored(0, C.Data(), C.Stride());
-
   }
-  
+
 
 
   bool SetTileDataUse() {
@@ -148,21 +146,36 @@ int main() {
 
 
     // 创建输入矩阵向量
-    std::vector<Matrix<int8_t>> VA;
-    std::vector<Matrix<int8_t>> VB;
-    VA.reserve(16);  
-    VB.reserve(16);
-    Matrix<int32_t> C(16, 16);
-    C.Fill(0);
+    std::vector<Matrix<int8_t>> VA0;
+    std::vector<Matrix<int8_t>> VB0;
+    std::vector<Matrix<int8_t>> VA1;
+    std::vector<Matrix<int8_t>> VB1;
+    VA0.reserve(16);  
+    VB0.reserve(16);
+    VA1.reserve(16);  
+    VB1.reserve(16);
+    Matrix<int32_t> C00(16, 16);
+    C00.Fill(0);
+    Matrix<int32_t> C01(16, 16);
+    C01.Fill(0);
+    Matrix<int32_t> C10(16, 16);
+    C10.Fill(0);
+    Matrix<int32_t> C11(16, 16);
+    C11.Fill(0);
 
     // 初始化矩阵
     int rows = 16, cols = 64;
     for (int i = 0; i < 16; ++i) {
-        VA.emplace_back(rows, cols); 
-        VB.emplace_back(rows, cols); 
+        VA0.emplace_back(rows, cols); 
+        VB0.emplace_back(rows, cols); 
 
-        VA.back().Fill(2); 
-        VB.back().Fill(2); 
+        VA1.emplace_back(rows, cols); 
+        VB1.emplace_back(rows, cols); 
+
+        VA0.back().Fill(2); 
+        VB0.back().Fill(2); 
+        VA1.back().Fill(2); 
+        VB1.back().Fill(2); 
       
     }
   
@@ -170,10 +183,10 @@ int main() {
     // 执行乘法
     auto multiply = IntelAmxMatrixMultiply<int8_t, int32_t>::Create();
 
-    int k = 10000000;
+    int iteration = 10000000;
     auto t0 = std::chrono::high_resolution_clock::now();
-    for(int i = 0 ; i < k; i++){
-      multiply.MatrixMultiply(VA, VB, C);
+    for(int i = 0 ; i < iteration; i++){
+      multiply.MatrixMultiply(VA0, VA1, VB0, VB1 , C00, C01, C10, C11);
     }
     auto t1 = std::chrono::high_resolution_clock::now();
 
@@ -181,9 +194,9 @@ int main() {
 
     auto cost_time = static_cast<double>((t1 - t0).count());
     auto ops_per_matmul = int64_t(16) * 64 * 16 * 2;
-    auto items  = static_cast<double>(ops_per_matmul * k * 16);
+    auto items  = static_cast<double>(ops_per_matmul * iteration * 16 * 4);
     auto gflops = items / cost_time ;
-    std::cout <<"循环次数: " << k << "\n";
+    std::cout <<"循环次数: " << iteration << "\n";
     std::cout <<"Intel Amx cost time:" << cost_time / 1e9 <<"s, GFLOPS: " << std::fixed << std::setprecision(4) << gflops << "gflops" << "\n";
 
     return 0;

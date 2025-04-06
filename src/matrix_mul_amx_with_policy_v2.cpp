@@ -145,7 +145,6 @@ int main() {
   // 创建矩阵
   Matrix<int8_t> A0(16, 64);
   Matrix<int8_t> B0(16, 64);
- 
 
   Matrix<int8_t> A1(16, 64);
   Matrix<int8_t> B1(16, 64);
@@ -154,7 +153,6 @@ int main() {
   Matrix<int32_t> C01(16, 16);
   Matrix<int32_t> C10(16, 16);
   Matrix<int32_t> C11(16, 16);
-
 
   // 初始化矩阵
   A0.Fill(2);
@@ -170,28 +168,20 @@ int main() {
   // 执行乘法
   auto multiply = IntelAmxMatrixMultiply<int8_t, int32_t>::Create();
 
-  int k = 100000;
+  int iteration = 100000;
   auto t0 = std::chrono::high_resolution_clock::now();
-  for(int i = 0 ; i < k; i++){
+  for(int i = 0 ; i < iteration; i++){
     multiply.MatrixMultiply(A0, A1, B0, B1, C00, C01, C10, C11);
   }
   auto t1 = std::chrono::high_resolution_clock::now();
 
   multiply.TileRelease();
 
-  // // 打印结果（简单验证）
-  // for (int i = 0; i < C.Rows(); ++i) {
-  //   for (int j = 0; j < C.Cols(); ++j) {
-  //     std::cout << C.Data()[i * C.Cols() + j] << " ";
-  //   }
-  //   std::cout << "\n";
-  // }
-
   auto cost_time = static_cast<double>((t1 - t0).count());
   auto ops_per_matmul = int64_t(A0.Rows()) * A0.Cols() * B0.Cols() * 2;
-  auto items  = static_cast<double>(ops_per_matmul * k);
+  auto items  = static_cast<double>(ops_per_matmul * iteration);
   auto gflops = items / cost_time ;
-  std::cout <<"循环次数: " << k << "\n";
+  std::cout <<"循环次数: " << iteration << "\n";
   std::cout <<"Intel Amx cost time:" << cost_time / 1e9 <<"s, GFLOPS: " << std::fixed << std::setprecision(4) << gflops << "gflops" << "\n";
 
   return 0;

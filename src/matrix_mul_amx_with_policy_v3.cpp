@@ -96,38 +96,6 @@ public:
     return self;
   }
 
-  void MatrixMultiply(Matrix<InputType> &A0, Matrix<InputType> &A1, Matrix<InputType> &B0, Matrix<InputType> &B1, 
-                      Matrix<OutputType> &C00, Matrix<OutputType> &C01, Matrix<OutputType> &C10, Matrix<OutputType> &C11) {
-
-
-      _tile_loadd(0, A0.Data(), A0.Stride());
-      _tile_loadd(1, B0.Data(), B0.Stride());
-
-      _tile_loadd(2, A1.Data(), A1.Stride());
-      _tile_loadd(3, B1.Data(), B1.Stride());
-
-      _tile_loadd(4, C00.Data(), C00.Stride());
-      _tile_loadd(5, C01.Data(), C01.Stride());
-      _tile_loadd(6, C10.Data(), C10.Stride());
-      _tile_loadd(7, C11.Data(), C11.Stride());
-
-  
-      _tile_dpbssd(4, 0, 1);
-      _tile_stored(4, C00.Data(), C00.Stride());
-  
-      _tile_dpbssd(5, 0, 3);
-      _tile_stored(5, C01.Data(), C01.Stride());
-
-      _tile_dpbssd(6, 2, 1);
-      _tile_stored(6, C10.Data(), C10.Stride());
-
-      _tile_dpbssd(7, 2, 3);
-      _tile_stored(7, C11.Data(), C11.Stride());
-
-
-  
-  }   
-
   void MatrixMultiply(std::vector<Matrix<InputType>> &VA, std::vector<Matrix<InputType>> &VB, Matrix<OutputType> &C) {
       // todo check VA VB size
       _tile_loadd(0, C.Data(), C.Stride());
@@ -168,7 +136,7 @@ int main() {
 
     // 初始化矩阵
     int rows = 16, cols = 64;
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 16; ++i) {
         VA.emplace_back(rows, cols); 
         VB.emplace_back(rows, cols); 
 
@@ -181,9 +149,9 @@ int main() {
     // 执行乘法
     auto multiply = IntelAmxMatrixMultiply<int8_t, int32_t>::Create();
 
-    int k = 10000000;
+    int iteration = 10000000;
     auto t0 = std::chrono::high_resolution_clock::now();
-    for(int i = 0 ; i < k; i++){
+    for(int i = 0 ; i < iteration; i++){
       multiply.MatrixMultiply(VA, VB, C);
     }
     auto t1 = std::chrono::high_resolution_clock::now();
@@ -192,9 +160,9 @@ int main() {
 
     auto cost_time = static_cast<double>((t1 - t0).count());
     auto ops_per_matmul = int64_t(16) * 64 * 16 * 2;
-    auto items  = static_cast<double>(ops_per_matmul * k * 8);
+    auto items  = static_cast<double>(ops_per_matmul * iteration * 16);
     auto gflops = items / cost_time ;
-    std::cout <<"循环次数: " << k << "\n";
+    std::cout <<"循环次数: " << iteration << "\n";
     std::cout <<"Intel Amx cost time:" << cost_time / 1e9 <<"s, GFLOPS: " << std::fixed << std::setprecision(4) << gflops << "gflops" << "\n";
 
     return 0;

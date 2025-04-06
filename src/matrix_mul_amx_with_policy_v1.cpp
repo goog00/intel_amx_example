@@ -137,29 +137,21 @@ int main() {
   // 执行乘法
   auto multiply = IntelAmxMatrixMultiply<int8_t, int32_t>::Create();
 
-  int k = 100000;
+  int iteration = 100000;
   auto t0 = std::chrono::high_resolution_clock::now();
-  for(int i = 0 ; i < k; i++){
+  for(int i = 0 ; i < iteration; i++){
     multiply.MatrixMultiply(A, B, C);
   }
   auto t1 = std::chrono::high_resolution_clock::now();
 
   multiply.TileRelease();
 
-  // // 打印结果（简单验证）
-  // for (int i = 0; i < C.Rows(); ++i) {
-  //   for (int j = 0; j < C.Cols(); ++j) {
-  //     std::cout << C.Data()[i * C.Cols() + j] << " ";
-  //   }
-  //   std::cout << "\n";
-  // }
-
   auto cost_time = static_cast<double>((t1 - t0).count());
   auto ops_per_matmul = int64_t(A.Rows()) * A.Cols() * B.Cols() * 2;
-  auto items  = static_cast<double>(ops_per_matmul * k);
+  auto items  = static_cast<double>(ops_per_matmul * iteration);
   auto gflops = items / cost_time ;
-  std::cout <<"循环次数: " << k << "\n";
-  std::cout <<"Intel Amx cost time:" << cost_time / 1e9 <<"s, GFLOPS: " << std::fixed << std::setprecision(4) << gflops << "gflops" << "\n";
+  std::cout <<"循环次数: " << iteration << "\n";
+  std::cout <<"Intel Amx cost time:" << cost_time / 1e9 <<"s, GFLOPs: " << std::fixed << std::setprecision(4) << gflops << "gflops" << "\n";
 
   return 0;
 }

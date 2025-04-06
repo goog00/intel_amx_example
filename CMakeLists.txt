@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options(-O3 -march=native -mamx-tile -mamx-int8 -fno-strict-aliasing)
 
 # 添加可执行文件
-add_executable(matrix_mul_amx src/matrix_mul_amx.cpp)
-add_executable(matrix_mul_amx_with_policy src/matrix_mul_amx_with_policy.cpp)
-add_executable(matrix_mul_amx_with_policy_2 src/matrix_mul_amx_with_policy_2.cpp)
-add_executable(matrix_mul_amx_with_policy_3 src/matrix_mul_amx_with_policy_3.cpp)
+add_executable(matrix_mul_amx_with_policy_1 src/matrix_mul_amx_with_policy_v1.cpp)
+add_executable(matrix_mul_amx_with_policy_2 src/matrix_mul_amx_with_policy_v2.cpp)
+add_executable(matrix_mul_amx_with_policy_3 src/matrix_mul_amx_with_policy_v3.cpp)
+add_executable(matrix_mul_amx_with_policy_4 src/matrix_mul_amx_with_policy_v4.cpp)
