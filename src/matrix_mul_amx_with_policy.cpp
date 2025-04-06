@@ -95,8 +95,7 @@ public:
     return self;
   }
 
-  void MatrixMultiply(Matrix<InputType> &A0, Matrix<InputType> &A1, 
-                      Matrix<InputType> &B0, Matrix<InputType> &B1, 
+  void MatrixMultiply(Matrix<InputType> &A0, Matrix<InputType> &A1, Matrix<InputType> &B0, Matrix<InputType> &B1, 
                       Matrix<OutputType> &C00, Matrix<OutputType> &C01, Matrix<OutputType> &C10, Matrix<OutputType> &C11) {
 
 
@@ -128,17 +127,6 @@ public:
   
   }    
 
-  void MatrixMultiply(Matrix<InputType> &A, Matrix<InputType> &B,
-                           Matrix<OutputType> &C) {
-
-    _tile_loadd(2, A.Data(), A.Stride());
-    _tile_loadd(3, B.Data(), B.Stride());
-    _tile_loadd(1, C.Data(), C.Stride());
-
-    _tile_dpbssd(1, 2, 3);
-    _tile_stored(1, C.Data(), C.Stride());
-
-  }
 
   bool SetTileDataUse() {
     auto res = syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA);
