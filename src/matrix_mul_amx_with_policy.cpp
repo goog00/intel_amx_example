@@ -99,9 +99,11 @@ public:
                       Matrix<InputType> &B0, Matrix<InputType> &B1, 
                       Matrix<OutputType> &C00, Matrix<OutputType> &C01, Matrix<OutputType> &C10, Matrix<OutputType> &C11) {
 
+
       _tile_loadd(0, A0.Data(), A0.Stride());
-      _tile_loadd(1, A1.Data(), A1.Stride());
-      _tile_loadd(2, B0.Data(), B0.Stride());
+      _tile_loadd(1, B0.Data(), B0.Stride());
+
+      _tile_loadd(2, A1.Data(), A1.Stride());
       _tile_loadd(3, B1.Data(), B1.Stride());
 
       _tile_loadd(4, C00.Data(), C00.Stride());
@@ -110,18 +112,17 @@ public:
       _tile_loadd(7, C11.Data(), C11.Stride());
 
   
-      _tile_dpbssd(4, 0, 2);
+      _tile_dpbssd(4, 0, 1);
       _tile_stored(4, C00.Data(), C00.Stride());
   
       _tile_dpbssd(5, 0, 3);
       _tile_stored(5, C01.Data(), C01.Stride());
 
-      _tile_dpbssd(6, 1, 2);
+      _tile_dpbssd(6, 2, 1);
       _tile_stored(6, C10.Data(), C10.Stride());
 
-      _tile_dpbssd(7, 1, 3);
+      _tile_dpbssd(7, 2, 3);
       _tile_stored(7, C11.Data(), C11.Stride());
-
 
 
   
