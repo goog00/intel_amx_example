@@ -5,12 +5,12 @@ Intel® AMX（Advanced Matrix Extensions）是x86指令集的新扩展，专为�
 1. **基于Tile的架构**
    * AMX 引入了tile寄存器（TMM0–TMM7），每个 tile 是一个二维矩阵寄存器（最多 8 个）。
    * 每个 tile 的大小（行数、列数）是可配置的，通过 LDTILECFG 指令进行配置。
-   * 支持的数据类型包括：`bf16`、`int8`、`int16`、`fp16`、`fp32`（部分取决于具体的 AMX 扩展版本，如 AMX-BF16、AMX-INT8 等）。
+   * 支持的数据类型包括：`bf16`、`int8`、`int16`、`fp16`（部分取决于具体的 AMX 扩展版本，如 AMX-BF16、AMX-INT8 等）。
 2. **Tile 配置灵活**
-   * 可动态配置 tile 的维度与行为，每个 tile 最多可容纳 1024 个元素（例如 16x64）。
+   * 可动态配置 tile 的维度与行为，每个 tile 最多可配置为 16 行 × 64 字节，共 1024 字节（例如 int8 类型可容纳 16×64 = 1024 个元素）。
    * Tile 配置通过 LDTILECFG 加载，可通过 STTILECFG 存储。
 
-用户可以通过本文提供的[代码](https://github.com/goog00/intel_amx_example)学习使用AMX指令，项目地址：<https://github.com/goog00/intel_amx_example>，也可以通过[官方示例](https://www.intel.com/content/www/us/en/developer/articles/code-sample/advanced-matrix-extensions-intrinsics-functions.html)学习。
+用户可以通过本文提供的[代码](https://github.com/goog00/intel_amx_example)学习使用AMX指令，项目地址：[https://github.com/goog00/intel_amx_example](https://github.com/goog00/intel_amx_example)，也可以通过[官方示例](https://www.intel.com/content/www/us/en/developer/articles/code-sample/advanced-matrix-extensions-intrinsics-functions.html)学习。
 
 本文通过不断提高计算访存比（计算强度），一步步优化矩阵乘法实现，最大化AMX硬件的性能来提高处理矩阵乘的效率。
 
@@ -31,6 +31,7 @@ void MatrixMultiply(Matrix<InputType> &A, Matrix<InputType> &B, Matrix<OutputTyp
 ```
 
 **硬件配置：** Intel(R) Xeon(R) Platinum 8458P, 4核4G
+
 **特点与瓶颈：**
 
 * **简单直接**：加载矩阵A、B到tile寄存器，执行一次乘加运算（`_tile_dpbssd`），结果存回C。
@@ -78,6 +79,7 @@ void MatrixMultiply(Matrix<InputType> &A0, Matrix<InputType> &A1, Matrix<InputTy
 ```
 
 **硬件配置：** Intel(R) Xeon(R) Platinum 8458P, 4核4G
+
 **优化亮点：**
 
 * **tile寄存器分块**：A0/1, B0/1四个tile寄存器只读取了一次，且两次参与到了计算中去， 其计算强度得到了提升，
@@ -97,7 +99,7 @@ Intel Amx cost time:1.03217s, GOPS: 1269.8740GOPS
 
 ---
 
-#### 第3版：增加k纬度的长度， 提升C的计算强度
+#### 第3版：增加k维度的长度， 提升C的计算强度
 
 第3版(参见matrix\_mul\_amx\_with\_policy\_v3.cpp)， 根据矩阵乘法的特性 C[MxN] = A[MxK] * B[KxN]，我们可以知道， 增加K的长度并不会改变C的尺寸， 所以我们在A/B的tile（小矩阵）上增加了K纬度的长度。
 
@@ -114,6 +116,7 @@ void MatrixMultiply(std::vector<Matrix<InputType>> &VA, std::vector<Matrix<Input
 ```
 
 **硬件配置：** Intel(R) Xeon(R) Platinum 8458P, 4核4G
+
 **优化亮点：**
 
 * **极大的提升了C的计算强度**：循环开始前读取一次C，每次在k纬度的迭代加载一对输入矩阵（VA[i]、VB[i]），结果累加到tile 0， 循环结束后再取回C， 当K取一个合适的值时，C的计算强度我会得到极大的提升
@@ -135,7 +138,7 @@ Intel Amx cost time:3.94255s, GOPS: 1329.8203GOPS
 
 #### 第4版：极致优化，最大化硬件利用
 
-第4版，参见matrix\_mul\_amx\_with\_policy\_v4.cpp，该版本我们融合了前两版的策略，使A，B，C的计算强度都得到了提升
+第4版(参见matrix\_mul\_amx\_with\_policy\_v4.cpp)，该版本我们融合了前两版的策略，使A，B，C的计算强度都得到了提升
 
 ```
  void MatrixMultiply(std::vector<Matrix<InputType>> &VA0, std::vector<Matrix<InputType>> &VA1, std::vector<Matrix<InputType>> &VB0, std::vector<Matrix<InputType>> &VB1,
@@ -170,6 +173,7 @@ Intel Amx cost time:3.94255s, GOPS: 1329.8203GOPS
 ```
 
 **硬件配置：** Intel(R) Xeon(R) Platinum 8458P, 4核4G
+
 **优化亮点：**
 
 * **提升了A, B的计算强度**：使用满了8个tile寄存器，最大化提升A， B的计算强度
@@ -223,22 +227,20 @@ Intel Amx cost time:9.76914s, GOPS: 2146.7103GOPS
 总性能: 40302.2399 GOPS
 ```
 
-#### 总结与展望
+#### 总结
 
-从第1版到第5版的优化过程，体现了如何围绕AMX硬件特性逐步提升性能的关键思路：
+从第1版到第5版的优化历程，展示了如何围绕 Intel AMX 指令的特性逐步提升矩阵乘法性能的核心策略：
 
-1. **充分利用tile寄存器**：从3个tile到8个tile，硬件资源利用率大幅提升。
-2. **减少访存开销**：从频繁存储到一次性存回，优化了内存带宽。
-3. **增加计算并行性**：通过分块和累加，最大化AMX的计算吞吐量。
+1. **硬件资源最大化利用**：从第1版仅使用 3 个 tile 寄存器，到第2版和第4版充分利用 8 个 tile 寄存器，大幅提升了 AMX 的硬件利用率。
+2. **计算强度提升**：
+   * 第2版通过分块复用 A 和 B 的 tile，增加了单次计算量。
+   * 第3版引入 K 维度的循环累加，显著提高了 C 的计算强度。
+   * 第4版融合两者，优化了 A、B、C 的整体计算强度。
+3. **多线程并行**：第5版引入多线程，将计算任务分配到多核（最高 64 核），在 64 核配置下实现 40 TOPS 的 int8 算力，展现了 AMX 在高并发场景下的潜力。
 
-未来，可以进一步探索动态tile配置、异步访存与计算重叠等技术，继续挖掘AMX的潜力。希望这篇文章能为你的矩阵运算优化提供启发！如果有更多问题，欢迎留言讨论。
+**性能成果**：
 
-### 编译命令
+* 单线程从第1版的 682 GOPS 提升到第4版的 2146 GOPS，增长超 3 倍。
+* 多线程（64 核）总性能达 40302 GOPS（40.3 TOPS），凸显了并行优化的价值。
 
-#### matrix_mul_amx.cpp
-
-clang++ -O3  -march=native -mamx-tile -mamx-int8 -fno-strict-aliasing matrix_mul_amx.cpp -o ../build/matrix_mul_amx
-
-#### matrix_mul_amx_with_policy.cpp
-
-clang++ -O3  -march=native -mamx-tile -mamx-int8 -fno-strict-aliasing matrix_mul_amx_with_policy.cpp -o ../build/matrix_mul_amx_with_policy
+通过这一系列优化，我们不仅挖掘了 AMX 的硬件潜力，也为高性能矩阵运算提供了实用参考。欢迎读者基于本文代码实验并提出更多优化思路，一起探索 AMX 的极限性能！

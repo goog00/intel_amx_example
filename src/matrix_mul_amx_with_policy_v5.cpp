@@ -162,92 +162,72 @@ struct TestData {
   }
 };
 
-// 测试函数，测量 MatrixMultiply 时间并计算 GFLOPS
 void run_test(int thread_id, int iterations, TestData& data, double& result_time, double& result_gflops) {
   auto t0 = std::chrono::high_resolution_clock::now();
-  for(int i = 0; i < iterations; i++) {
-      data.multiply.MatrixMultiply(data.VA0, data.VA1, data.VB0, data.VB1, 
-                                 data.C00, data.C01, data.C10, data.C11);
+  for (int i = 0; i < iterations; i++) {
+      data.multiply.MatrixMultiply(data.VA0, data.VA1, data.VB0, data.VB1,
+                                   data.C00, data.C01, data.C10, data.C11);
   }
   auto t1 = std::chrono::high_resolution_clock::now();
 
   auto cost_time = static_cast<double>((t1 - t0).count());
-  auto ops_per_matmul = int64_t(16) * 64 * 16 * 2; // 单次矩阵乘法的浮点运算次数
-  auto total_flops = static_cast<double>(ops_per_matmul * iterations * 16 * 4); // 总浮点运算次数
-  auto gflops = total_flops / cost_time; // GFLOPS
+  auto ops_per_matmul = int64_t(16) * 64 * 16 * 2 * 4 * 16; // 2097152
+  auto total_flops = static_cast<double>(ops_per_matmul * iterations);
+  auto gflops = total_flops / cost_time;
 
-  result_time = cost_time / 1e9;  // 转换为秒
+  result_time = cost_time / 1e9;
   result_gflops = gflops;
 }
 
 int main() {
-  int iterations = 10000000 / 2;
+  int total_iterations = 10000000;
+  int thread_count = 128; // 按 32 核优化，最高配置
+  int iterations_per_thread = total_iterations / thread_count;
 
-  // 初始化测试数据（单线程）
-  TestData data1, data2;
-
+  // 初始化测试数据
+  std::vector<TestData> thread_data(thread_count);
   int rows = 16, cols = 64;
-  for (int i = 0; i < 16; ++i) {
-      data1.VA0.emplace_back(rows, cols); data1.VA0.back().Fill(2);
-      data1.VB0.emplace_back(rows, cols); data1.VB0.back().Fill(2);
-      data1.VA1.emplace_back(rows, cols); data1.VA1.back().Fill(2);
-      data1.VB1.emplace_back(rows, cols); data1.VB1.back().Fill(2);
-      
-      data2.VA0.emplace_back(rows, cols); data2.VA0.back().Fill(2);
-      data2.VB0.emplace_back(rows, cols); data2.VB0.back().Fill(2);
-      data2.VA1.emplace_back(rows, cols); data2.VA1.back().Fill(2);
-      data2.VB1.emplace_back(rows, cols); data2.VB1.back().Fill(2);
+  for (int t = 0; t < thread_count; ++t) {
+      for (int i = 0; i < 16; ++i) {
+          thread_data[t].VA0.emplace_back(rows, cols); thread_data[t].VA0.back().Fill(2);
+          thread_data[t].VB0.emplace_back(rows, cols); thread_data[t].VB0.back().Fill(2);
+          thread_data[t].VA1.emplace_back(rows, cols); thread_data[t].VA1.back().Fill(2);
+          thread_data[t].VB1.emplace_back(rows, cols); thread_data[t].VB1.back().Fill(2);
+      }
+      thread_data[t].C00.Fill(0);
+      thread_data[t].C01.Fill(0);
+      thread_data[t].C10.Fill(0);
+      thread_data[t].C11.Fill(0);
   }
 
-  data1.C00.Fill(0);
-  data1.C01.Fill(0);
-  data1.C10.Fill(0);
-  data1.C11.Fill(0);
-  data2.C00.Fill(0);
-  data2.C01.Fill(0);
-  data2.C10.Fill(0);
-  data2.C11.Fill(0);
-
   // 多线程测试
-  double time1, time2;
-  double gflops1, gflops2;
+  std::vector<std::thread> threads;
+  std::vector<double> times(thread_count);
+  std::vector<double> gflops(thread_count);
 
   auto total_start = std::chrono::high_resolution_clock::now();
-  
-  std::thread t1(run_test, 1, iterations, std::ref(data1), std::ref(time1), std::ref(gflops1));
-  std::thread t2(run_test, 2, iterations, std::ref(data2), std::ref(time2), std::ref(gflops2));
-  
-  t1.join();
-  t2.join();
-  
+  for (int t = 0; t < thread_count; ++t) {
+      threads.emplace_back(run_test, t, iterations_per_thread, std::ref(thread_data[t]),
+                           std::ref(times[t]), std::ref(gflops[t]));
+  }
+  for (auto& t : threads) t.join();
   auto total_end = std::chrono::high_resolution_clock::now();
   auto total_time = static_cast<double>((total_end - total_start).count()) / 1e9;
 
   // 打印结果
-  std::cout << "线程 1 - 循环次数: " << iterations << "\n";
-  std::cout << "执行时间: " << std::fixed << std::setprecision(4) << time1 
-            << " 秒, 性能: " << std::fixed << std::setprecision(4) << gflops1 << " GFLOPS\n";
-  
-  std::cout << "线程 2 - 循环次数: " << iterations << "\n";
-  std::cout << "执行时间: " << std::fixed << std::setprecision(4) << time2 
-            << " 秒, 性能: " << std::fixed << std::setprecision(4) << gflops2 << " GFLOPS\n";
-  
-  std::cout << "总执行时间: " << std::fixed << std::setprecision(4) 
-            << total_time << " 秒\n";
-  
-  std::cout << "时间差 (线程1 + 线程2 - 总时间): " 
-            << std::fixed << std::setprecision(4) 
-            << (time1 + time2 - total_time) << " 秒\n";
-  
-  // 计算并显示总 GFLOPS（基于总时间）
-  auto ops_per_matmul = int64_t(16) * 64 * 16 * 2;
-  auto total_flops = static_cast<double>(ops_per_matmul * iterations * 16 * 4 * 2); // 两个线程的总 FLOPs
+  for (int t = 0; t < thread_count; ++t) {
+      std::cout << "线程 " << t << " - 循环次数: " << iterations_per_thread << "\n";
+      std::cout << "执行时间: " << std::fixed << std::setprecision(4) << times[t]
+                << " 秒, 性能: " << std::fixed << std::setprecision(4) << gflops[t] << " GFLOPS\n";
+  }
+  std::cout << "总执行时间: " << std::fixed << std::setprecision(4) << total_time << " 秒\n";
+
+  // 计算总 GFLOPS
+  auto ops_per_matmul = int64_t(16) * 64 * 16 * 2 * 4 * 16; // 2097152
+  auto total_flops = static_cast<double>(ops_per_matmul * total_iterations);
   auto total_gflops = total_flops / (total_time * 1e9);
-  std::cout << "总性能: " << std::fixed << std::setprecision(4) 
-            << total_gflops << " GFLOPS\n";
+  std::cout << "总性能: " << std::fixed << std::setprecision(4) << total_gflops << " GFLOPS\n";
 
-  data1.multiply.TileRelease();
-  data2.multiply.TileRelease();
-
+  for (auto& data : thread_data) data.multiply.TileRelease();
   return 0;
 }
