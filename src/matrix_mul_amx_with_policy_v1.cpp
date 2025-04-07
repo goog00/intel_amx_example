@@ -123,16 +123,13 @@ public:
 int main() {
   // 创建矩阵
   Matrix<int8_t> A(16, 64);
-  Matrix<int8_t> B(64, 16);
+  Matrix<int8_t> B(16, 64);
   Matrix<int32_t> C(16, 16);
 
   // 初始化矩阵
   A.Fill(2);
-  // A.Print();
   B.Fill(2);
-  // B.Print();
   C.Fill(0);
-  // C.Print();
 
   // 执行乘法
   auto multiply = IntelAmxMatrixMultiply<int8_t, int32_t>::Create();
@@ -147,7 +144,7 @@ int main() {
   multiply.TileRelease();
 
   auto cost_time = static_cast<double>((t1 - t0).count());
-  auto ops_per_matmul = int64_t(A.Rows()) * A.Cols() * B.Cols() * 2;
+  auto ops_per_matmul = int64_t(16) * 64 * 16 * 2;
   auto items  = static_cast<double>(ops_per_matmul * iteration);
   auto gflops = items / cost_time ;
   std::cout <<"循环次数: " << iteration << "\n";

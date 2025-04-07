@@ -149,7 +149,7 @@ int main() {
     // 执行乘法
     auto multiply = IntelAmxMatrixMultiply<int8_t, int32_t>::Create();
 
-    int iteration = 10000000;
+    int iteration = 1000000;
     auto t0 = std::chrono::high_resolution_clock::now();
     for(int i = 0 ; i < iteration; i++){
       multiply.MatrixMultiply(VA, VB, C);
