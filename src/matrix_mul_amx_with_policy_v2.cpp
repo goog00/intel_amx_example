@@ -168,7 +168,7 @@ int main() {
   // 执行乘法
   auto multiply = IntelAmxMatrixMultiply<int8_t, int32_t>::Create();
 
-  int iteration = 100000;
+  int iteration = 1000000;
   auto t0 = std::chrono::high_resolution_clock::now();
   for(int i = 0 ; i < iteration; i++){
     multiply.MatrixMultiply(A0, A1, B0, B1, C00, C01, C10, C11);
@@ -178,8 +178,8 @@ int main() {
   multiply.TileRelease();
 
   auto cost_time = static_cast<double>((t1 - t0).count());
-  auto ops_per_matmul = int64_t(A0.Rows()) * A0.Cols() * B0.Cols() * 2;
-  auto items  = static_cast<double>(ops_per_matmul * iteration);
+  auto ops_per_matmul = int64_t(16) * 64 * 16 * 2;
+  auto items  = static_cast<double>(ops_per_matmul * iteration * 4);
   auto gflops = items / cost_time ;
   std::cout <<"循环次数: " << iteration << "\n";
   std::cout <<"Intel Amx cost time:" << cost_time / 1e9 <<"s, GFLOPS: " << std::fixed << std::setprecision(4) << gflops << "gflops" << "\n";
