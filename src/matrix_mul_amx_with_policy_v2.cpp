@@ -95,13 +95,14 @@ public:
     return self;
   }
 
-  void MatrixMultiply(Matrix<InputType> &A0, Matrix<InputType> &A1, 
-                      Matrix<InputType> &B0, Matrix<InputType> &B1, 
+  void MatrixMultiply(Matrix<InputType> &A0, Matrix<InputType> &A1, Matrix<InputType> &B0, Matrix<InputType> &B1, 
                       Matrix<OutputType> &C00, Matrix<OutputType> &C01, Matrix<OutputType> &C10, Matrix<OutputType> &C11) {
 
+
       _tile_loadd(0, A0.Data(), A0.Stride());
-      _tile_loadd(1, A1.Data(), A1.Stride());
-      _tile_loadd(2, B0.Data(), B0.Stride());
+      _tile_loadd(1, B0.Data(), B0.Stride());
+
+      _tile_loadd(2, A1.Data(), A1.Stride());
       _tile_loadd(3, B1.Data(), B1.Stride());
 
       _tile_loadd(4, C00.Data(), C00.Stride());
@@ -110,34 +111,22 @@ public:
       _tile_loadd(7, C11.Data(), C11.Stride());
 
   
-      _tile_dpbssd(4, 0, 2);
+      _tile_dpbssd(4, 0, 1);
       _tile_stored(4, C00.Data(), C00.Stride());
   
       _tile_dpbssd(5, 0, 3);
       _tile_stored(5, C01.Data(), C01.Stride());
 
-      _tile_dpbssd(6, 1, 2);
+      _tile_dpbssd(6, 2, 1);
       _tile_stored(6, C10.Data(), C10.Stride());
 
-      _tile_dpbssd(7, 1, 3);
+      _tile_dpbssd(7, 2, 3);
       _tile_stored(7, C11.Data(), C11.Stride());
-
 
 
   
   }    
 
-  void MatrixMultiply(Matrix<InputType> &A, Matrix<InputType> &B,
-                           Matrix<OutputType> &C) {
-
-    _tile_loadd(2, A.Data(), A.Stride());
-    _tile_loadd(3, B.Data(), B.Stride());
-    _tile_loadd(1, C.Data(), C.Stride());
-
-    _tile_dpbssd(1, 2, 3);
-    _tile_stored(1, C.Data(), C.Stride());
-
-  }
 
   bool SetTileDataUse() {
     auto res = syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA);
@@ -156,7 +145,6 @@ int main() {
   // 创建矩阵
   Matrix<int8_t> A0(16, 64);
   Matrix<int8_t> B0(16, 64);
- 
 
   Matrix<int8_t> A1(16, 64);
   Matrix<int8_t> B1(16, 64);
@@ -165,7 +153,6 @@ int main() {
   Matrix<int32_t> C01(16, 16);
   Matrix<int32_t> C10(16, 16);
   Matrix<int32_t> C11(16, 16);
-
 
   // 初始化矩阵
   A0.Fill(2);
@@ -181,28 +168,20 @@ int main() {
   // 执行乘法
   auto multiply = IntelAmxMatrixMultiply<int8_t, int32_t>::Create();
 
-  int k = 100000;
+  int iteration = 100000;
   auto t0 = std::chrono::high_resolution_clock::now();
-  for(int i = 0 ; i < k; i++){
+  for(int i = 0 ; i < iteration; i++){
     multiply.MatrixMultiply(A0, A1, B0, B1, C00, C01, C10, C11);
   }
   auto t1 = std::chrono::high_resolution_clock::now();
 
   multiply.TileRelease();
 
-  // // 打印结果（简单验证）
-  // for (int i = 0; i < C.Rows(); ++i) {
-  //   for (int j = 0; j < C.Cols(); ++j) {
-  //     std::cout << C.Data()[i * C.Cols() + j] << " ";
-  //   }
-  //   std::cout << "\n";
-  // }
-
   auto cost_time = static_cast<double>((t1 - t0).count());
   auto ops_per_matmul = int64_t(A0.Rows()) * A0.Cols() * B0.Cols() * 2;
-  auto items  = static_cast<double>(ops_per_matmul * k);
+  auto items  = static_cast<double>(ops_per_matmul * iteration);
   auto gflops = items / cost_time ;
-  std::cout <<"循环次数: " << k << "\n";
+  std::cout <<"循环次数: " << iteration << "\n";
   std::cout <<"Intel Amx cost time:" << cost_time / 1e9 <<"s, GFLOPS: " << std::fixed << std::setprecision(4) << gflops << "gflops" << "\n";
 
   return 0;
