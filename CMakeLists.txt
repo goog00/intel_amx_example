@@ -13,3 +13,4 @@ add_executable(matrix_mul_amx_with_policy_1 src/matrix_mul_amx_with_policy_v1.cp
 add_executable(matrix_mul_amx_with_policy_2 src/matrix_mul_amx_with_policy_v2.cpp)
 add_executable(matrix_mul_amx_with_policy_3 src/matrix_mul_amx_with_policy_v3.cpp)
 add_executable(matrix_mul_amx_with_policy_4 src/matrix_mul_amx_with_policy_v4.cpp)
+add_executable(matrix_mul_amx_with_policy_5 src/matrix_mul_amx_with_policy_v5.cpp)
