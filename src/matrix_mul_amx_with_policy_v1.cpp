@@ -1,154 +1,140 @@
+#include <immintrin.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+#include <cassert>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <immintrin.h>
-#include <iostream>
-#include <sys/syscall.h>
-#include <unistd.h>
-#include <cassert>
-#include <memory>
-#include <chrono>
-
 #include <iomanip>
-
-
+#include <iostream>
+#include <memory>
 
 template <typename DataType>
 class Matrix {
+   private:
+    int rows;
+    int cols;
+    DataType *data;
 
-private:
-  int rows;
-  int cols;
-  DataType *data;
+   public:
+    Matrix(int rows, int cols) : rows(rows), cols(cols) { data = new DataType[rows * cols]; }
+    ~Matrix() { delete[] data; }
 
-public:
-  Matrix(int rows, int cols) : rows(rows), cols(cols) {
-    data = new DataType[rows * cols];
-  }
-  ~Matrix() { delete[] data; }
+    size_t Stride() { return this->cols * sizeof(DataType); }
+    DataType *Data() const { return data; }
+    int Rows() const { return rows; }
+    int Cols() const { return cols; }
 
-  size_t Stride() { return this->cols * sizeof(DataType); }
-  DataType *Data() const { return data; }
-  int Rows() const { return rows; }
-  int Cols() const { return cols; }
+    int Size() const { return rows * cols; }
 
-  int Size() const { return rows * cols; }
-
-  // 用于初始化
-  void Fill(DataType value) {
-    for (int i = 0; i < rows * cols; ++i) {
-      data[i] = value;
-    }
-  }
-
-  // 打印矩阵
-  void Print_t() const {
-    for (int i = 0; i < rows; ++i) {
-      for (int j = 0; j < cols; ++j) {
-        std::cout << static_cast<int>(data[i * cols + j]) << " ";
-      }
-      std::cout << "\n";
+    // 用于初始化
+    void Fill(DataType value) {
+        for (int i = 0; i < rows * cols; ++i) {
+            data[i] = value;
+        }
     }
 
-    std::cout << "\n";
-  }
+    // 打印矩阵
+    void Print_t() const {
+        for (int i = 0; i < rows; ++i) {
+            for (int j = 0; j < cols; ++j) {
+                std::cout << static_cast<int>(data[i * cols + j]) << " ";
+            }
+            std::cout << "\n";
+        }
+
+        std::cout << "\n";
+    }
 };
 
 struct __tile_config {
-  uint8_t palette_id; // 配置模式:0 1
-  uint8_t start_row;
-  uint8_t reserved_0[14];
-  uint16_t colsb[16]; // 每个 tile 的列字节数
-  uint8_t rows[16];   // 每个 tile 的行数
+    uint8_t palette_id;  // 配置模式:0 1
+    uint8_t start_row;
+    uint8_t reserved_0[14];
+    uint16_t colsb[16];  // 每个 tile 的列字节数
+    uint8_t rows[16];    // 每个 tile 的行数
 };
 
 template <typename InputType, typename OutputType>
 class IntelAmxMatrixMultiply {
+   private:
+    IntelAmxMatrixMultiply() = default;
 
-private:
-
-  IntelAmxMatrixMultiply() = default;
-
-  void InitTileConfig() {
-    __tile_config tileinfo{};
-    tileinfo.palette_id = 1;
-    tileinfo.start_row = 0;
-    for (int i = 0; i < 8; ++i) {
-      tileinfo.colsb[i] = COLSB;
-      tileinfo.rows[i] = ROWS;
+    void InitTileConfig() {
+        __tile_config tileinfo{};
+        tileinfo.palette_id = 1;
+        tileinfo.start_row = 0;
+        for (int i = 0; i < 8; ++i) {
+            tileinfo.colsb[i] = COLSB;
+            tileinfo.rows[i] = ROWS;
+        }
+        _tile_loadconfig(&tileinfo);
     }
-    _tile_loadconfig(&tileinfo);
-  }
 
-  int ARCH_REQ_XCOMP_PERM = 0x1023;
-  int XFEATURE_XTILEDATA = 18;
-  int ROWS = 16;
-  int COLSB = 64;
+    int ARCH_REQ_XCOMP_PERM = 0x1023;
+    int XFEATURE_XTILEDATA = 18;
+    int ROWS = 16;
+    int COLSB = 64;
 
+   public:
+    static IntelAmxMatrixMultiply Create() {
+        IntelAmxMatrixMultiply self;
+        self.SetTileDataUse();
+        self.InitTileConfig();
+        return self;
+    }
 
-public:
+    void MatrixMultiply(Matrix<InputType> &A, Matrix<InputType> &B, Matrix<OutputType> &C) {
+        _tile_loadd(2, A.Data(), A.Stride());
+        _tile_loadd(3, B.Data(), B.Stride());
+        _tile_loadd(1, C.Data(), C.Stride());
 
-  static IntelAmxMatrixMultiply Create() {
-    IntelAmxMatrixMultiply self;
-    self.SetTileDataUse();
-    self.InitTileConfig();
-    return self;
-  }
+        _tile_dpbssd(1, 2, 3);
+        _tile_stored(1, C.Data(), C.Stride());
+    }
 
-  void MatrixMultiply(Matrix<InputType> &A, Matrix<InputType> &B,
-                           Matrix<OutputType> &C) {
+    bool SetTileDataUse() {
+        auto res = syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA);
+        assert(!res && "fail:Invoke syscall to set ARCH_SET_STATE_USE ");
+        return true;
+    }
 
-    _tile_loadd(2, A.Data(), A.Stride());
-    _tile_loadd(3, B.Data(), B.Stride());
-    _tile_loadd(1, C.Data(), C.Stride());
-
-    _tile_dpbssd(1, 2, 3);
-    _tile_stored(1, C.Data(), C.Stride());
-
-  }
-
-  bool SetTileDataUse() {
-    auto res = syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA);
-    assert(!res && "fail:Invoke syscall to set ARCH_SET_STATE_USE ");
-    return true;
-  }
-
-  void TileRelease() {
-    _tile_release();
-  }
-
+    void TileRelease() { _tile_release(); }
 };
 
 // 测试代码
 int main() {
-  // 创建矩阵
-  Matrix<int8_t> A(16, 64);
-  Matrix<int8_t> B(16, 64);
-  Matrix<int32_t> C(16, 16);
+    // 创建矩阵
+    Matrix<int8_t> A(16, 64);
+    Matrix<int8_t> B(16, 64);
+    Matrix<int32_t> C(16, 16);
 
-  // 初始化矩阵
-  A.Fill(2);
-  B.Fill(2);
-  C.Fill(0);
+    // 初始化矩阵
+    A.Fill(2);
+    B.Fill(2);
+    C.Fill(0);
 
-  // 执行乘法
-  auto multiply = IntelAmxMatrixMultiply<int8_t, int32_t>::Create();
+    // 执行乘法
+    auto multiply = IntelAmxMatrixMultiply<int8_t, int32_t>::Create();
 
-  int iteration = 1000000;
-  auto t0 = std::chrono::high_resolution_clock::now();
-  for(int i = 0 ; i < iteration; i++){
-    multiply.MatrixMultiply(A, B, C);
-  }
-  auto t1 = std::chrono::high_resolution_clock::now();
+    int iteration = 1000000;
+    auto t0 = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < iteration; i++) {
+        multiply.MatrixMultiply(A, B, C);
+    }
+    auto t1 = std::chrono::high_resolution_clock::now();
 
-  multiply.TileRelease();
+    multiply.TileRelease();
 
-  auto cost_time = static_cast<double>((t1 - t0).count());
-  auto ops_per_matmul = int64_t(16) * 64 * 16 * 2;
-  auto items  = static_cast<double>(ops_per_matmul * iteration);
-  auto gflops = items / cost_time ;
-  std::cout <<"循环次数: " << iteration << "\n";
-  std::cout <<"Intel Amx cost time:" << cost_time / 1e9 <<"s, GFLOPs: " << std::fixed << std::setprecision(4) << gflops << "gflops" << "\n";
+    auto cost_time = static_cast<double>((t1 - t0).count());
+    auto ops_per_matmul = int64_t(16) * 64 * 16 * 2;
+    auto items = static_cast<double>(ops_per_matmul * iteration);
+    auto gflops = items / cost_time;
+    std::cout << "循环次数: " << iteration << "\n";
+    std::cout << "Intel Amx cost time:" << cost_time / 1e9 << "s, GFLOPs: " << std::fixed
+              << std::setprecision(4) << gflops << "gflops" << "\n";
 
-  return 0;
+    return 0;
 }
