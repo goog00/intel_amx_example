@@ -156,7 +156,7 @@ Intel Amx cost time:3.94255s, GOPS: 1329.8203GOPS
                   _tile_loadd(2, VA1[k].Data(), VA1[k].Stride()); // A10(:,k)
                   _tile_loadd(3, VB1[k].Data(), VB1[k].Stride()); // B01(k,:)
 
-                  // 外积方式进行 accumulate
+                 
                   _tile_dpbssd(4, 0, 1); // C00 += A00(:,k) * B00(k,:)
                   _tile_dpbssd(5, 0, 3); // C01 += A00(:,k) * B01(k,:)
                   _tile_dpbssd(6, 2, 1); // C10 += A10(:,k) * B00(k,:)
